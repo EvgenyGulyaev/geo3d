@@ -94,9 +94,10 @@ type GenerateRequest struct {
 
 	SplitBoard     bool    `json:"split_board"`      // разбить модель на тайлы
 	BoardSizeMM    float64 `json:"board_size_mm"`    // размер 1 платы в мм (напр. 160)
-	MergeTiles     bool    `json:"merge_tiles"`
-	MergeGapMM     float64 `json:"merge_gap_mm"`
-	Email          string  `json:"email"`            // email для отправки результата
+	MergeTiles       bool    `json:"merge_tiles"`
+	MergeGapMM       float64 `json:"merge_gap_mm"`
+	HeightMultiplier float64 `json:"height_multiplier"` // множитель высоты зданий
+	Email            string  `json:"email"`              // email для отправки результата
 }
 
 const (

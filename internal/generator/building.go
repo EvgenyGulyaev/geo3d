@@ -11,7 +11,7 @@ import (
 // GenerateBuilding создаёт 3D-меш здания из его контура и высоты.
 // centerLat, centerLon — центр карты для преобразования координат в метры.
 // clipRect — (опционально) прямоугольник для отсечения контура (или nil).
-func GenerateBuilding(b geo.Building, centerLat, centerLon float64, clipRect *math2d.Rect) *Mesh {
+func GenerateBuilding(b geo.Building, centerLat, centerLon float64, clipRect *math2d.Rect, heightMultiplier float64) *Mesh {
 	if len(b.Outline) < 3 {
 		return nil
 	}
@@ -48,7 +48,10 @@ func GenerateBuilding(b geo.Building, centerLat, centerLon float64, clipRect *ma
 	}
 
 	n := len(points2D)
-	height := float32(b.Height)
+	if heightMultiplier <= 0 {
+		heightMultiplier = 1.0
+	}
+	height := float32(b.Height * heightMultiplier)
 
 	mesh := &Mesh{
 		Name:  fmt.Sprintf("building_%d", b.ID),
@@ -129,10 +132,10 @@ func GenerateBuilding(b geo.Building, centerLat, centerLon float64, clipRect *ma
 }
 
 // GenerateBuildings генерирует меши для списка зданий.
-func GenerateBuildings(buildings []geo.Building, centerLat, centerLon float64, clipRect *math2d.Rect) []*Mesh {
+func GenerateBuildings(buildings []geo.Building, centerLat, centerLon float64, clipRect *math2d.Rect, heightMultiplier float64) []*Mesh {
 	var meshes []*Mesh
 	for _, b := range buildings {
-		if m := GenerateBuilding(b, centerLat, centerLon, clipRect); m != nil {
+		if m := GenerateBuilding(b, centerLat, centerLon, clipRect, heightMultiplier); m != nil {
 			meshes = append(meshes, m)
 		}
 	}

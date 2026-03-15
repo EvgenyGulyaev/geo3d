@@ -225,7 +225,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 				}
 
 				buildingsAdded := 0
-				for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, &clipRect) {
+				for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, &clipRect, req.HeightMultiplier) {
 					if m != nil {
 						scene.AddMesh(m)
 						buildingsAdded++
@@ -310,7 +310,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 			}
 		}
 
-		for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, nil) {
+		for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, nil, req.HeightMultiplier) {
 			scene.AddMesh(m)
 		}
 

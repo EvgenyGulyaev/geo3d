@@ -95,6 +95,7 @@ type GenerateRequest struct {
 	// Разделение на платы
 	SplitBoard     bool    `json:"split_board"`      // разбить модель на тайлы
 	BoardSizeMM    float64 `json:"board_size_mm"`    // размер 1 платы в мм (напр. 160)
+	Email          string  `json:"email"`            // email для отправки результата
 }
 
 const (

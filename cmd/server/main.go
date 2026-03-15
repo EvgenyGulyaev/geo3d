@@ -18,12 +18,7 @@ func main() {
 	modelCache := cache.New(cfg.CacheSize)
 
 	// Создаём обработчик и роутер с настройками из конфига
-	handler := api.NewHandler(
-		modelCache,
-		cfg.OverpassAPIURL,
-		cfg.ElevationAPIURL,
-		cfg.NominatimAPIURL,
-	)
+	handler := api.NewHandler(modelCache, cfg)
 	router := api.NewRouter(handler)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

@@ -1,4 +1,10 @@
-2026/03/15 19:23:56 🏙️  3D Maps Generator starting on http://localhost:8082
-2026/03/15 19:23:56 📍 POST /api/v1/generate - Generate 3D model
-2026/03/15 19:23:56 🔍 GET  /api/v1/geocode?q=Moscow - Geocode city
-2026/03/15 19:23:56 ❤️  GET  /api/v1/health - Health check
+2026/03/15 19:29:52 🏙️  3D Maps Generator starting on http://localhost:8082
+2026/03/15 19:29:52 📍 POST /api/v1/generate - Generate 3D model
+2026/03/15 19:29:52 🔍 GET  /api/v1/geocode?q=Moscow - Geocode city
+2026/03/15 19:29:52 ❤️  GET  /api/v1/health - Health check
+2026/03/15 19:29:57 Incoming request: {City:Taganrog Lat:0 Lon:0 WidthM:500 HeightM:500 Format: IncludeTerrain:false IncludeRoads:false PrintReady:true Scale:0 BaseThickness:0 MinWall:0 SplitBoard:false BoardSizeMM:0 Email:test@example.com}
+2026/03/15 19:29:57 Generating model: lat=47.21537 lon=38.92852 size=500x500 format=stl
+2026/03/15 19:29:57 POST /api/v1/generate 202 430.742375ms
+2026/03/15 19:30:00 Fetched 268 buildings
+2026/03/15 19:30:00 >>> Branch: SINGLE MODEL (Split=false Size=0)
+2026/03/15 19:30:00 Failed to send email to test@example.com: SMTP host not configured

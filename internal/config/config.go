@@ -15,6 +15,12 @@ type Config struct {
 	OverpassAPIURL    string
 	ElevationAPIURL   string
 	NominatimAPIURL   string
+	// SMTP settings
+	SMTPHost          string
+	SMTPPort          int
+	SMTPUser          string
+	SMTPPass          string
+	SMTPFrom          string
 }
 
 // Load читает конфигурацию из .env файла и переменных окружения.
@@ -29,6 +35,11 @@ func Load() *Config {
 		OverpassAPIURL:    getEnv("OVERPASS_API_URL", "https://overpass-api.de/api/interpreter"),
 		ElevationAPIURL:   getEnv("ELEVATION_API_URL", "https://api.open-elevation.com/api/v1/lookup"),
 		NominatimAPIURL:   getEnv("NOMINATIM_API_URL", "https://nominatim.openstreetmap.org"),
+		SMTPHost:          getEnv("SMTP_HOST", ""),
+		SMTPPort:          getEnvAsInt("SMTP_PORT", 587),
+		SMTPUser:          getEnv("SMTP_USER", ""),
+		SMTPPass:          getEnv("SMTP_PASS", ""),
+		SMTPFrom:          getEnv("SMTP_FROM", ""),
 	}
 
 	return cfg

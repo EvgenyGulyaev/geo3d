@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/evgeny/3d-maps/internal/cache"
+	"github.com/evgeny/3d-maps/internal/config"
 	"github.com/evgeny/3d-maps/internal/generator"
 	"github.com/evgeny/3d-maps/internal/geo"
+	"github.com/evgeny/3d-maps/internal/mail"
 	"github.com/evgeny/3d-maps/internal/math2d"
 )
 
@@ -22,15 +24,19 @@ type Handler struct {
 	elevation *geo.ElevationClient
 	nominatim *geo.NominatimClient
 	cache     *cache.LRU
+	mail      *mail.Mailer
+	cfg       *config.Config
 }
 
 // NewHandler создаёт обработчик.
-func NewHandler(c *cache.LRU, overpassURL, elevationURL, nominatimURL string) *Handler {
+func NewHandler(c *cache.LRU, cfg *config.Config) *Handler {
 	return &Handler{
-		overpass:  geo.NewOverpassClient(overpassURL),
-		elevation: geo.NewElevationClient(elevationURL),
-		nominatim: geo.NewNominatimClient(nominatimURL),
+		overpass:  geo.NewOverpassClient(cfg.OverpassAPIURL),
+		elevation: geo.NewElevationClient(cfg.ElevationAPIURL),
+		nominatim: geo.NewNominatimClient(cfg.NominatimAPIURL),
 		cache:     c,
+		mail:      mail.NewMailer(cfg),
+		cfg:       cfg,
 	}
 }
 
@@ -83,7 +89,57 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Email != "" {
+		// Асинхронная обработка
+		go h.processGenerateAsync(req, cacheKey)
+		writeJSON(w, http.StatusAccepted, map[string]string{
+			"message": "Generation started. You will receive an email once it is finished.",
+			"status":  "processing",
+		})
+		return
+	}
+
+	resultData, resultFormat, err := h.generateModelSync(req, cacheKey)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeModelResponse(w, resultData, resultFormat)
+}
+
+func (h *Handler) processGenerateAsync(req geo.GenerateRequest, cacheKey string) {
+	data, format, err := h.generateModelSync(req, cacheKey)
+	if err != nil {
+		log.Printf("Async generation error: %v", err)
+		return
+	}
+
+	filename := "model." + format
+	if format == "zip" {
+		filename = "3d_model_tiles.zip"
+	}
+
+	err = h.mail.SendModelEmail(req.Email, filename, data)
+	if err != nil {
+		log.Printf("Failed to send email to %s: %v", req.Email, err)
+	} else {
+		log.Printf("Email successfully sent to %s", req.Email)
+	}
+}
+
+func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (resultData []byte, resultFormat string, err error) {
 	start := time.Now()
+	// Проверяем кэш еще раз (на случай если за время пока мы думали он там появился)
+	if data, ok := h.cache.Get(cacheKey); ok {
+		log.Printf("Cache hit in sync worker for %s", cacheKey)
+		effectiveFormat := req.Format
+		if req.SplitBoard {
+			effectiveFormat = "zip"
+		}
+		return data, effectiveFormat, nil
+	}
+
 	log.Printf("Generating model: lat=%.5f lon=%.5f size=%.0fx%.0f format=%s",
 		req.Lat, req.Lon, req.WidthM, req.HeightM, req.Format)
 
@@ -95,8 +151,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 	// Здания
 	buildings, err := h.overpass.FetchBuildings(bbox)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "fetch buildings: "+err.Error())
-		return
+		return nil, "", fmt.Errorf("fetch buildings: %w", err)
 	}
 	log.Printf("Fetched %d buildings", len(buildings))
 
@@ -112,8 +167,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// === Генерация ===
-	var resultData []byte
-	var resultFormat = req.Format
+	resultFormat = req.Format
 
 	// Если запрошено разделение на платы
 	if req.SplitBoard && req.BoardSizeMM > 0 {
@@ -296,7 +350,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 	// Кэшируем
 	h.cache.Set(cacheKey, resultData)
 
-	writeModelResponse(w, resultData, resultFormat)
+	return resultData, resultFormat, nil
 }
 
 func shiftScene(scene *generator.Scene, offsetX, offsetY float32) {

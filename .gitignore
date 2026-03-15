@@ -27,3 +27,5 @@ go.work.sum
 
 # Environment variables
 .env
+
+.idea

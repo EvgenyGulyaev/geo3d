@@ -2,3 +2,17 @@
 2026/03/15 20:24:24 📍 POST /api/v1/generate - Generate 3D model
 2026/03/15 20:24:24 🔍 GET  /api/v1/geocode?q=Moscow - Geocode city
 2026/03/15 20:24:24 ❤️  GET  /api/v1/health - Health check
+2026/03/15 20:24:36 Incoming request: {City:Taganrog Lat:0 Lon:0 WidthM:14000 HeightM:6000 Format: IncludeTerrain:false IncludeRoads:true PrintReady:true Scale:0.045 BaseThickness:0 MinWall:0 SplitBoard:true BoardSizeMM:160 MergeTiles:false MergeGapMM:0 HeightMultiplier:1.8 Email:wardercompany@gmail.com}
+2026/03/15 20:24:36 Generating model: lat=47.21537 lon=38.92852 size=14000x6000 format=stl
+2026/03/15 20:24:36 POST /api/v1/generate 202 350.262542ms
+2026/03/15 20:24:37 Overpass response status: 200
+2026/03/15 20:24:38 Fetched 23863 buildings
+2026/03/15 20:24:38 Overpass response status: 200
+2026/03/15 20:24:38 Fetched 2228 roads
+2026/03/15 20:24:38 >>> Branch: SPLIT BOARD (BoardSize=160.0)
+2026/03/15 20:24:38 Splitting into 4x2 tiles, tile size 3555.56m (board 160mm, scale 0.045000)
+2026/03/15 20:24:38 Final format: zip (merged=false), tiles: 8
+2026/03/15 20:24:38 Model generated and cached in 2.235438625s
+2026/03/15 20:24:38 Attempting to send email to wardercompany@gmail.com via smtp.gmail.com:587 (from: wardercompany@gmail.com)...
+2026/03/15 20:24:49 Successfully sent email to wardercompany@gmail.com
+2026/03/15 20:24:49 Email successfully sent to wardercompany@gmail.com

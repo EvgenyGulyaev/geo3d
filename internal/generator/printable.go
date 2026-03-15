@@ -91,49 +91,26 @@ func MergeAllMeshes(scene *Scene) *Mesh {
 	return merged
 }
 
-// generateSolidBase создаёт прямоугольный параллелепипед-основу.
-// minX, minZ, maxX, maxZ — границы модели; thickness — толщина.
+// generateSolidBase создаёт прямоугольный параллелепипед-основу с боковыми стенками (skirts).
 func generateSolidBase(minX, minZ, maxX, maxZ, thickness float32) *Mesh {
-	// Небольшая выступающая кромка вокруг модели
-	margin := thickness * 0.5
-	x1 := minX - margin
-	z1 := minZ - margin
-	x2 := maxX + margin
-	z2 := maxZ + margin
-
-	y1 := float32(0)     // дно
-	y2 := thickness       // верх основы
+	x1, z1, x2, z2 := minX, minZ, maxX, maxZ
+	y1 := float32(0)
+	y2 := thickness
 
 	mesh := &Mesh{
 		Name:  "print_base",
 		Color: [4]float32{0.6, 0.6, 0.6, 1.0},
 	}
 
-	// 6 граней × 4 вершины = 24 вершины
 	// Верх (Y = y2)
-	addQuad(mesh, 
-		x1, y2, z1,  x2, y2, z1,  x2, y2, z2,  x1, y2, z2,
-		0, 1, 0)
+	addQuad(mesh, x1, y2, z1, x2, y2, z1, x2, y2, z2, x1, y2, z2, 0, 1, 0)
 	// Дно (Y = y1)
-	addQuad(mesh,
-		x1, y1, z2,  x2, y1, z2,  x2, y1, z1,  x1, y1, z1,
-		0, -1, 0)
-	// Передняя стенка (Z = z2)
-	addQuad(mesh,
-		x1, y1, z2,  x1, y2, z2,  x2, y2, z2,  x2, y1, z2,
-		0, 0, 1)
-	// Задняя стенка (Z = z1)
-	addQuad(mesh,
-		x2, y1, z1,  x2, y2, z1,  x1, y2, z1,  x1, y1, z1,
-		0, 0, -1)
-	// Левая стенка (X = x1)
-	addQuad(mesh,
-		x1, y1, z1,  x1, y2, z1,  x1, y2, z2,  x1, y1, z2,
-		-1, 0, 0)
-	// Правая стенка (X = x2)
-	addQuad(mesh,
-		x2, y1, z2,  x2, y2, z2,  x2, y2, z1,  x2, y1, z1,
-		1, 0, 0)
+	addQuad(mesh, x1, y1, z2, x2, y1, z2, x2, y1, z1, x1, y1, z1, 0, -1, 0)
+	// Стенки
+	addQuad(mesh, x1, y1, z2, x1, y2, z2, x2, y2, z2, x2, y1, z2, 0, 0, 1)   // Перед
+	addQuad(mesh, x2, y1, z1, x2, y2, z1, x1, y2, z1, x1, y1, z1, 0, 0, -1)  // Зад
+	addQuad(mesh, x1, y1, z1, x1, y2, z1, x1, y2, z2, x1, y1, z2, -1, 0, 0)  // Лево
+	addQuad(mesh, x2, y1, z2, x2, y2, z2, x2, y2, z1, x2, y1, z1, 1, 0, 0)   // Право
 
 	return mesh
 }

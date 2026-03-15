@@ -1,13 +1,4 @@
-2026/03/15 19:51:40 🏙️  3D Maps Generator starting on http://localhost:8082
-2026/03/15 19:51:40 📍 POST /api/v1/generate - Generate 3D model
-2026/03/15 19:51:40 🔍 GET  /api/v1/geocode?q=Moscow - Geocode city
-2026/03/15 19:51:40 ❤️  GET  /api/v1/health - Health check
-2026/03/15 19:51:46 Incoming request: {City:Taganrog Lat:0 Lon:0 WidthM:500 HeightM:500 Format: IncludeTerrain:false IncludeRoads:false PrintReady:true Scale:0 BaseThickness:0 MinWall:0 SplitBoard:false BoardSizeMM:0 Email:wardercompany@gmail.com}
-2026/03/15 19:51:46 Generating model: lat=47.21537 lon=38.92852 size=500x500 format=stl
-2026/03/15 19:51:46 POST /api/v1/generate 202 213.896291ms
-2026/03/15 19:51:47 Overpass response status: 200
-2026/03/15 19:51:47 Fetched 268 buildings
-2026/03/15 19:51:47 >>> Branch: SINGLE MODEL (Split=false Size=0)
-2026/03/15 19:51:47 Attempting to send email to wardercompany@gmail.com via smtp.gmail.com:587 (from: wardercompany@gmail.com)...
-2026/03/15 19:51:51 Successfully sent email to wardercompany@gmail.com
-2026/03/15 19:51:51 Email successfully sent to wardercompany@gmail.com
+2026/03/15 20:09:41 🏙️  3D Maps Generator starting on http://localhost:8082
+2026/03/15 20:09:41 📍 POST /api/v1/generate - Generate 3D model
+2026/03/15 20:09:41 🔍 GET  /api/v1/geocode?q=Moscow - Geocode city
+2026/03/15 20:09:41 ❤️  GET  /api/v1/health - Health check

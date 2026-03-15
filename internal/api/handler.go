@@ -73,10 +73,11 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ключ кэша
-	cacheKey := fmt.Sprintf("%.5f_%.5f_%.0f_%.0f_%s_%v_%v_%v_%.6f_%.1f_%v_%.1f",
+	cacheKey := fmt.Sprintf("%.5f_%.5f_%.0f_%.0f_%s_%v_%v_%v_%.6f_%.1f_%v_%.1f_%v_%.1f",
 		req.Lat, req.Lon, req.WidthM, req.HeightM, req.Format,
 		req.IncludeTerrain, req.IncludeRoads, req.PrintReady,
-		req.Scale, req.BaseThickness, req.SplitBoard, req.BoardSizeMM)
+		req.Scale, req.BaseThickness, req.SplitBoard, req.BoardSizeMM,
+		req.MergeTiles, req.MergeGapMM)
 
 	// Проверяем кэш
 	if data, ok := h.cache.Get(cacheKey); ok {
@@ -134,7 +135,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 	if data, ok := h.cache.Get(cacheKey); ok {
 		log.Printf("Cache hit in sync worker for %s", cacheKey)
 		effectiveFormat := req.Format
-		if req.SplitBoard {
+		if req.SplitBoard && !req.MergeTiles {
 			effectiveFormat = "zip"
 		}
 		return data, effectiveFormat, nil
@@ -189,45 +190,40 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 		var zipBuf bytes.Buffer
 		zipWriter := zip.NewWriter(&zipBuf)
 		
+		mergedScene := generator.NewScene()
 		validTilesCount := 0
+		gapMM := req.MergeGapMM
+		if gapMM <= 0 {
+			gapMM = 10.0
+		}
 		
 		// Рельеф (скачиваем один раз на всю область, если нужно)
-		var grid *geo.ElevationGrid
+		var _ *geo.ElevationGrid
 		if req.IncludeTerrain {
 			var err error
-			grid, err = h.elevation.FetchElevationGrid(bbox, 20)
+			_, err = h.elevation.FetchElevationGrid(bbox, 20)
 			if err != nil {
 				log.Printf("Warning: fetch elevation failed for split: %v", err)
-				grid = nil // fallback flat
 			}
 		}
 
 		// Генерация каждого тайла
 		for y := 0; y < numY; y++ {
 			for x := 0; x < numX; x++ {
-				// Локальные метры для тайла (относительно центра всей карты)
-				// Центр всей карты - (0,0).
-				// Левый нижний угол всей карты: -Width/2, -Height/2
 				startX := -req.WidthM/2.0 + float64(x)*tileSizeMeters
 				startY := -req.HeightM/2.0 + float64(y)*tileSizeMeters
 				endX := startX + tileSizeMeters
 				endY := startY + tileSizeMeters
 
 				clipRect := math2d.Rect{MinX: startX, MinY: startY, MaxX: endX, MaxY: endY}
-
-				// Строим сцену для тайла
 				scene := generator.NewScene()
 				
-				// Дороги
 				if req.IncludeRoads {
 					for _, m := range generator.GenerateRoads(roads, req.Lat, req.Lon, &clipRect) {
-						if m != nil {
-							scene.AddMesh(m)
-						}
+						if m != nil { scene.AddMesh(m) }
 					}
 				}
 
-				// Здания
 				buildingsAdded := 0
 				for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, &clipRect) {
 					if m != nil {
@@ -236,65 +232,60 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 					}
 				}
 
-				// Рельеф (упрощенно: плоская земля ровно под размер тайла, если не включен terrain)
-				if req.IncludeTerrain && grid != nil && grid.Width > 0 {
-					// TODO: полноценная обрезка рельефа (пока fallback на кусок плоскости для демо)
-					scene.AddMesh(generator.GenerateFlatGroundFromRect(clipRect.MinX, clipRect.MinY, clipRect.MaxX, clipRect.MaxY))
-				} else {
-					scene.AddMesh(generator.GenerateFlatGroundFromRect(clipRect.MinX, clipRect.MinY, clipRect.MaxX, clipRect.MaxY))
-				}
-
-				// Если пусто (нет зданий и дорог) - пропускаем
 				if buildingsAdded == 0 && !req.IncludeRoads {
 					continue
 				}
 
-				// Подготовка к печати тайла
+				scene.AddMesh(generator.GenerateFlatGroundFromRect(clipRect.MinX, clipRect.MinY, clipRect.MaxX, clipRect.MaxY))
+
 				if req.PrintReady {
 					opts := generator.PrintOptions{
-						Scale:         req.Scale,
+						Scale: req.Scale,
 						BaseThickness: req.BaseThickness,
-						MinWallMM:     req.MinWall,
+						MinWallMM: req.MinWall,
 					}
-					// Сдвигаем все вершины тайла к (0,0) чтобы он печатался по центру стола
+					// Сдвигаем к 0,0 для отдельной плитки
 					offsetX := -(startX + tileSizeMeters/2.0)
 					offsetY := -(startY + tileSizeMeters/2.0)
-					
 					shiftScene(scene, float32(offsetX), float32(offsetY))
 					scene = generator.PrepareForPrint(scene, tileSizeMeters, tileSizeMeters, opts)
 				}
 				
-				// Запись тайла в архив
-				filename := fmt.Sprintf("tile_%d_%d.%s", x, y, req.Format)
-				fWriter, err := zipWriter.Create(filename)
-				if err != nil {
-					log.Printf("failed to create zip file %s: %v", filename, err)
-					continue
-				}
-
-				var buf bytes.Buffer
-				if req.Format == "stl" {
-					generator.ExportSTL(scene, &buf)
-				} else if req.Format == "obj" {
-					generator.ExportOBJ(scene, &buf)
+				if req.MergeTiles {
+					// Сдвигаем плитку в сетку для общего файла
+					// xMM = x * (boardSize + gap)
+					gridX := float32(float64(x) * (req.BoardSizeMM + gapMM))
+					gridY := float32(float64(y) * (req.BoardSizeMM + gapMM))
+					shiftScene(scene, gridX, gridY)
+					for _, m := range scene.Meshes {
+						mergedScene.AddMesh(m)
+					}
 				} else {
-					generator.ExportGLB(scene, &buf)
+					filename := fmt.Sprintf("tile_%d_%d.%s", x, y, req.Format)
+					fWriter, _ := zipWriter.Create(filename)
+					var buf bytes.Buffer
+					if req.Format == "stl" { generator.ExportSTL(scene, &buf) } else { generator.ExportGLB(scene, &buf) }
+					fWriter.Write(buf.Bytes())
 				}
-				
-				fWriter.Write(buf.Bytes())
 				validTilesCount++
 			}
 		}
 		
-		// Генерация SVG карты сборки
-		if validTilesCount > 0 {
-			svgFilename := "layout_map.svg"
-			svgWriter, _ := zipWriter.Create(svgFilename)
-			svgContent := generateLayoutSVG(numX, numY, tileSizeMeters, req.BoardSizeMM)
-			svgWriter.Write([]byte(svgContent))
+		if req.MergeTiles {
+			var buf bytes.Buffer
+			generator.ExportSTL(mergedScene, &buf)
+			resultData = buf.Bytes()
+			resultFormat = "stl"
+		} else {
+			if validTilesCount > 0 {
+				svgWriter, _ := zipWriter.Create("layout_map.svg")
+				svgWriter.Write([]byte(generateLayoutSVG(numX, numY, tileSizeMeters, req.BoardSizeMM)))
+			}
+			zipWriter.Close()
+			resultData = zipBuf.Bytes()
+			resultFormat = "zip"
 		}
 
-		zipWriter.Close()
 		resultData = zipBuf.Bytes()
 		resultFormat = "zip"
 		
@@ -430,11 +421,11 @@ func validateRequest(req *geo.GenerateRequest) error {
 	if req.HeightM <= 0 {
 		req.HeightM = 500
 	}
-	if req.WidthM > 2000 {
-		return fmt.Errorf("width must be <= 2000 meters")
+	if req.WidthM > 15000 {
+		return fmt.Errorf("width must be <= 15000 meters")
 	}
-	if req.HeightM > 2000 {
-		return fmt.Errorf("height must be <= 2000 meters")
+	if req.HeightM > 15000 {
+		return fmt.Errorf("height must be <= 15000 meters")
 	}
 	if req.Format == "" {
 		if req.PrintReady {

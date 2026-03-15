@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -184,10 +185,12 @@ func (c *OverpassClient) execute(query string) (*overpassResponse, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		log.Printf("SMTP HTTP request failed: %v", err) // Added log
 		return nil, fmt.Errorf("overpass request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	log.Printf("Overpass response status: %d", resp.StatusCode) // Added log
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("overpass status %d: %s", resp.StatusCode, string(respBody))

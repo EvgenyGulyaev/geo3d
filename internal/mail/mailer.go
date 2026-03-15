@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/smtp"
@@ -61,17 +62,23 @@ func (m *Mailer) SendModelEmail(to, filename string, data []byte) error {
 	encoder.Write(data)
 	encoder.Close()
 
-	writer.Close()
-
 	// Отправка через SMTP
+	log.Printf("Attempting to send email to %s via %s:%d (from: %s)...", to, m.cfg.SMTPHost, m.cfg.SMTPPort, m.cfg.SMTPUser)
 	auth := smtp.PlainAuth("", m.cfg.SMTPUser, m.cfg.SMTPPass, m.cfg.SMTPHost)
 	addr := fmt.Sprintf("%s:%d", m.cfg.SMTPHost, m.cfg.SMTPPort)
 
-	// В продакшене лучше использовать TLS, но для простоты начнём с обычного SMTP
-	err := smtp.SendMail(addr, auth, m.cfg.SMTPFrom, []string{to}, buf.Bytes())
+	// Gmail и другие сервера требуют чистый email в MAIL FROM
+	fromEmail := m.cfg.SMTPUser
+	if fromEmail == "" {
+		fromEmail = m.cfg.SMTPFrom // Fallback
+	}
+
+	err := smtp.SendMail(addr, auth, fromEmail, []string{to}, buf.Bytes())
 	if err != nil {
+		log.Printf("SMTP SendMail failed: %v", err)
 		return fmt.Errorf("send mail: %w", err)
 	}
 
+	log.Printf("Successfully sent email to %s", to)
 	return nil
 }

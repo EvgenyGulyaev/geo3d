@@ -47,6 +47,8 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("Incoming request: %+v", req)
+
 	// Валидация
 	if err := validateRequest(&req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -65,15 +67,19 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Ключ кэша
-	cacheKey := fmt.Sprintf("%.5f_%.5f_%.0f_%.0f_%s_%v_%v_%v_%.6f_%.1f",
+	cacheKey := fmt.Sprintf("%.5f_%.5f_%.0f_%.0f_%s_%v_%v_%v_%.6f_%.1f_%v_%.1f",
 		req.Lat, req.Lon, req.WidthM, req.HeightM, req.Format,
 		req.IncludeTerrain, req.IncludeRoads, req.PrintReady,
-		req.Scale, req.BaseThickness)
+		req.Scale, req.BaseThickness, req.SplitBoard, req.BoardSizeMM)
 
 	// Проверяем кэш
 	if data, ok := h.cache.Get(cacheKey); ok {
 		log.Printf("Cache hit for %s", cacheKey)
-		writeModelResponse(w, data, req.Format)
+		effectiveFormat := req.Format
+		if req.SplitBoard {
+			effectiveFormat = "zip"
+		}
+		writeModelResponse(w, data, effectiveFormat)
 		return
 	}
 
@@ -111,6 +117,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	// Если запрошено разделение на платы
 	if req.SplitBoard && req.BoardSizeMM > 0 {
+		log.Printf(">>> Branch: SPLIT BOARD (BoardSize=%.1f)", req.BoardSizeMM)
 		// BoardSizeMM - размер платы в мм. Scale: например, 0.002 = 2мм на 1метр.
 		// Значит, 1 плата в физическом мире покроет: BoardSizeMM / Scale (метров из геометрии)
 		baseScale := req.Scale
@@ -160,15 +167,19 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 				// Дороги
 				if req.IncludeRoads {
 					for _, m := range generator.GenerateRoads(roads, req.Lat, req.Lon, &clipRect) {
-						scene.AddMesh(m)
+						if m != nil {
+							scene.AddMesh(m)
+						}
 					}
 				}
 
 				// Здания
 				buildingsAdded := 0
 				for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, &clipRect) {
-					scene.AddMesh(m)
-					buildingsAdded++
+					if m != nil {
+						scene.AddMesh(m)
+						buildingsAdded++
+					}
 				}
 
 				// Рельеф (упрощенно: плоская земля ровно под размер тайла, если не включен terrain)
@@ -236,6 +247,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ZIP created with %d tiles in %v", validTilesCount, time.Since(start))
 
 	} else {
+		log.Printf(">>> Branch: SINGLE MODEL (Split=%v Size=%v)", req.SplitBoard, req.BoardSizeMM)
 		// Обычная генерация единой модели...
 		scene := generator.NewScene()
 		

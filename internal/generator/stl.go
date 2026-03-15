@@ -43,12 +43,14 @@ func ExportSTL(scene *Scene, w io.Writer) error {
 			i1 := m.Indices[t*3+1]
 			i2 := m.Indices[t*3+2]
 
-			// Вершины
-			v0x, v0y, v0z := m.Vertices[i0*3], m.Vertices[i0*3+1], m.Vertices[i0*3+2]
-			v1x, v1y, v1z := m.Vertices[i1*3], m.Vertices[i1*3+1], m.Vertices[i1*3+2]
-			v2x, v2y, v2z := m.Vertices[i2*3], m.Vertices[i2*3+1], m.Vertices[i2*3+2]
+			// Вершины: меняем Y и Z местами для Z-up (стандарт STL для принтеров)
+			// Оригинальный порядок в Go: X, Y(высота), Z(глубина)
+			// Целевой порядок STL: X, Y(глубина), Z(высота)
+			v0x, v0z, v0y := m.Vertices[i0*3], m.Vertices[i0*3+1], m.Vertices[i0*3+2]
+			v1x, v1z, v1y := m.Vertices[i1*3], m.Vertices[i1*3+1], m.Vertices[i1*3+2]
+			v2x, v2z, v2y := m.Vertices[i2*3], m.Vertices[i2*3+1], m.Vertices[i2*3+2]
 
-			// Вычисляем нормаль из вершин
+			// Вычисляем нормаль из вершин (с учетом нового порядка)
 			nx, ny, nz := computeNormal(v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z)
 
 			// Записываем треугольник

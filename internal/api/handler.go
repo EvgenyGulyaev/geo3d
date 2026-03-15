@@ -285,11 +285,8 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 			resultData = zipBuf.Bytes()
 			resultFormat = "zip"
 		}
-
-		resultData = zipBuf.Bytes()
-		resultFormat = "zip"
 		
-		log.Printf("ZIP created with %d tiles in %v", validTilesCount, time.Since(start))
+		log.Printf("Final format: %s (merged=%v), tiles: %d", resultFormat, req.MergeTiles, validTilesCount)
 
 	} else {
 		log.Printf(">>> Branch: SINGLE MODEL (Split=%v Size=%v)", req.SplitBoard, req.BoardSizeMM)
@@ -340,7 +337,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 
 	// Кэшируем
 	h.cache.Set(cacheKey, resultData)
-
+	log.Printf("Model generated and cached in %v", time.Since(start))
 	return resultData, resultFormat, nil
 }
 

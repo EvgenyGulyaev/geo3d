@@ -1,4 +1,4 @@
-2026/03/15 20:09:41 🏙️  3D Maps Generator starting on http://localhost:8082
-2026/03/15 20:09:41 📍 POST /api/v1/generate - Generate 3D model
-2026/03/15 20:09:41 🔍 GET  /api/v1/geocode?q=Moscow - Geocode city
-2026/03/15 20:09:41 ❤️  GET  /api/v1/health - Health check
+2026/03/15 20:20:49 🏙️  3D Maps Generator starting on http://localhost:8082
+2026/03/15 20:20:49 📍 POST /api/v1/generate - Generate 3D model
+2026/03/15 20:20:49 🔍 GET  /api/v1/geocode?q=Moscow - Geocode city
+2026/03/15 20:20:49 ❤️  GET  /api/v1/health - Health check

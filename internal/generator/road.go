@@ -27,14 +27,16 @@ func GenerateRoad(r geo.Road, centerLat, centerLon float64, clipRect *math2d.Rec
 	}
 
 	halfWidth := r.Width / 2.0
-	roadHeight := float32(0.05) // чуть выше земли
+	groundHeight := float32(0.0) // земля
+	roadThickness := float32(0.3) // толщина дороги в метрах
+	roadTopY := groundHeight + roadThickness
 
 	mesh := &Mesh{
 		Name:  fmt.Sprintf("road_%d", r.ID),
 		Color: roadColor(r.Type),
 	}
 
-	// Для каждого сегмента дороги создаём прямоугольник
+	// Для каждого сегмента дороги создаём 3D параллелепипед
 	for i := 0; i < len(r.Points)-1; i++ {
 		p1geo := geo.LatLonToMeters(r.Points[i].Lat, r.Points[i].Lon, centerLat, centerLon)
 		p2geo := geo.LatLonToMeters(r.Points[i+1].Lat, r.Points[i+1].Lon, centerLat, centerLon)
@@ -42,7 +44,6 @@ func GenerateRoad(r geo.Road, centerLat, centerLon float64, clipRect *math2d.Rec
 		p1 := triangulate.Point{X: p1geo.X, Y: p1geo.Y}
 		p2 := triangulate.Point{X: p2geo.X, Y: p2geo.Y}
 
-		// Направление сегмента
 		dx := p2.X - p1.X
 		dy := p2.Y - p1.Y
 		length := math.Sqrt(dx*dx + dy*dy)
@@ -50,56 +51,56 @@ func GenerateRoad(r geo.Road, centerLat, centerLon float64, clipRect *math2d.Rec
 			continue
 		}
 
-		// Перпендикуляр (нормаль)
 		nx := -dy / length * halfWidth
 		ny := dx / length * halfWidth
 
-		// Контур сегмента дороги
-		roadPoly := []triangulate.Point{
+		// Контур сегмента дороги (4 точки)
+		poly := []triangulate.Point{
 			{X: p1.X + nx, Y: p1.Y + ny},
-			{X: p1.X - nx, Y: p1.Y - ny},
-			{X: p2.X - nx, Y: p2.Y - ny},
 			{X: p2.X + nx, Y: p2.Y + ny},
+			{X: p2.X - nx, Y: p2.Y - ny},
+			{X: p1.X - nx, Y: p1.Y - ny},
 		}
 
 		if clipRect != nil {
-			roadPoly = math2d.ClipPolygon(roadPoly, *clipRect)
-			if len(roadPoly) < 3 {
+			poly = math2d.ClipPolygon(poly, *clipRect)
+			if len(poly) < 3 {
 				continue
 			}
-			
-			// Триангуляция обрезанного полигона (так как он может стать не 4-угольником)
-			triIndices := triangulate.Triangulate(roadPoly)
-			if len(triIndices) == 0 {
-				continue
-			}
+		}
 
-			vOffset := uint32(len(mesh.Vertices) / 3)
-			for _, pt := range roadPoly {
-				mesh.Vertices = append(mesh.Vertices, float32(pt.X), roadHeight, float32(pt.Y))
-				mesh.Normals = append(mesh.Normals, 0, 1, 0)
-			}
-			for _, idx := range triIndices {
-				mesh.Indices = append(mesh.Indices, vOffset+uint32(idx))
-			}
-			
-		} else {
-			// Оригинальное добавление без обрезки (квадратный сегмент)
+		// --- Крыша (верх дороги) ---
+		vOffset := uint32(len(mesh.Vertices) / 3)
+		indices := triangulate.Triangulate(poly)
+		if len(indices) == 0 {
+			continue
+		}
+		for _, pt := range poly {
+			mesh.Vertices = append(mesh.Vertices, float32(pt.X), roadTopY, float32(pt.Y))
+			mesh.Normals = append(mesh.Normals, 0, 1, 0)
+		}
+		for _, idx := range indices {
+			mesh.Indices = append(mesh.Indices, vOffset+uint32(idx))
+		}
+
+		// --- Стенки (бока дороги) ---
+		n := len(poly)
+		for j := 0; j < n; j++ {
+			next := (j + 1) % n
+			pp1 := poly[j]
+			pp2 := poly[next]
+
 			vIdx := uint32(len(mesh.Vertices) / 3)
-
+			// Четыре вершины стенки (нижний левый, нижний правый, верхний правый, верхний левый)
 			mesh.Vertices = append(mesh.Vertices,
-				float32(p1.X+nx), roadHeight, float32(p1.Y+ny),
-				float32(p1.X-nx), roadHeight, float32(p1.Y-ny),
-				float32(p2.X-nx), roadHeight, float32(p2.Y-ny),
-				float32(p2.X+nx), roadHeight, float32(p2.Y+ny),
+				float32(pp1.X), groundHeight, float32(pp1.Y),
+				float32(pp2.X), groundHeight, float32(pp2.Y),
+				float32(pp2.X), roadTopY, float32(pp2.Y),
+				float32(pp1.X), roadTopY, float32(pp1.Y),
 			)
-
-			// Нормали вверх
-			for j := 0; j < 4; j++ {
-				mesh.Normals = append(mesh.Normals, 0, 1, 0)
-			}
-
-			// Два треугольника
+			// Упрощенная нормаль (вбок)
+			mesh.Normals = append(mesh.Normals, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+			
 			mesh.Indices = append(mesh.Indices,
 				vIdx, vIdx+1, vIdx+2,
 				vIdx, vIdx+2, vIdx+3,

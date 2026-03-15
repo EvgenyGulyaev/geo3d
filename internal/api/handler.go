@@ -1,16 +1,19 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"time"
 
 	"github.com/evgeny/3d-maps/internal/cache"
 	"github.com/evgeny/3d-maps/internal/generator"
 	"github.com/evgeny/3d-maps/internal/geo"
+	"github.com/evgeny/3d-maps/internal/math2d"
 )
 
 // Handler содержит зависимости для HTTP-обработчиков.
@@ -102,75 +105,223 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// === Генерация 3D ===
-	scene := generator.NewScene()
+	// === Генерация ===
+	var resultData []byte
+	var resultFormat = req.Format
 
-	// Земля
-	if req.IncludeTerrain {
-		grid, err := h.elevation.FetchElevationGrid(bbox, 20)
-		if err != nil {
-			log.Printf("Warning: fetch elevation failed: %v, using flat ground", err)
-			scene.AddMesh(generator.GenerateFlatGround(req.WidthM, req.HeightM))
-		} else {
-			scene.AddMesh(generator.GenerateTerrain(grid, req.Lat, req.Lon))
+	// Если запрошено разделение на платы
+	if req.SplitBoard && req.BoardSizeMM > 0 {
+		// BoardSizeMM - размер платы в мм. Scale: например, 0.002 = 2мм на 1метр.
+		// Значит, 1 плата в физическом мире покроет: BoardSizeMM / Scale (метров из геометрии)
+		baseScale := req.Scale
+		if baseScale <= 0 {
+			baseScale = 1.0 // safeguard
 		}
-	} else {
-		scene.AddMesh(generator.GenerateFlatGround(req.WidthM, req.HeightM))
-	}
+		
+		tileSizeMeters := req.BoardSizeMM / baseScale
+		
+		numX := int(math.Ceil(req.WidthM / tileSizeMeters))
+		numY := int(math.Ceil(req.HeightM / tileSizeMeters))
 
-	// Дороги
-	if req.IncludeRoads {
-		for _, m := range generator.GenerateRoads(roads, req.Lat, req.Lon) {
+		log.Printf("Splitting into %dx%d tiles, tile size %.2fm (board %vmm, scale %.6f)", numX, numY, tileSizeMeters, req.BoardSizeMM, baseScale)
+
+		var zipBuf bytes.Buffer
+		zipWriter := zip.NewWriter(&zipBuf)
+		
+		validTilesCount := 0
+		
+		// Рельеф (скачиваем один раз на всю область, если нужно)
+		var grid *geo.ElevationGrid
+		if req.IncludeTerrain {
+			var err error
+			grid, err = h.elevation.FetchElevationGrid(bbox, 20)
+			if err != nil {
+				log.Printf("Warning: fetch elevation failed for split: %v", err)
+				grid = nil // fallback flat
+			}
+		}
+
+		// Генерация каждого тайла
+		for y := 0; y < numY; y++ {
+			for x := 0; x < numX; x++ {
+				// Локальные метры для тайла (относительно центра всей карты)
+				// Центр всей карты - (0,0).
+				// Левый нижний угол всей карты: -Width/2, -Height/2
+				startX := -req.WidthM/2.0 + float64(x)*tileSizeMeters
+				startY := -req.HeightM/2.0 + float64(y)*tileSizeMeters
+				endX := startX + tileSizeMeters
+				endY := startY + tileSizeMeters
+
+				clipRect := math2d.Rect{MinX: startX, MinY: startY, MaxX: endX, MaxY: endY}
+
+				// Строим сцену для тайла
+				scene := generator.NewScene()
+				
+				// Дороги
+				if req.IncludeRoads {
+					for _, m := range generator.GenerateRoads(roads, req.Lat, req.Lon, &clipRect) {
+						scene.AddMesh(m)
+					}
+				}
+
+				// Здания
+				buildingsAdded := 0
+				for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, &clipRect) {
+					scene.AddMesh(m)
+					buildingsAdded++
+				}
+
+				// Рельеф (упрощенно: плоская земля ровно под размер тайла, если не включен terrain)
+				if req.IncludeTerrain && grid != nil && grid.Width > 0 {
+					// TODO: полноценная обрезка рельефа (пока fallback на кусок плоскости для демо)
+					scene.AddMesh(generator.GenerateFlatGroundFromRect(clipRect.MinX, clipRect.MinY, clipRect.MaxX, clipRect.MaxY))
+				} else {
+					scene.AddMesh(generator.GenerateFlatGroundFromRect(clipRect.MinX, clipRect.MinY, clipRect.MaxX, clipRect.MaxY))
+				}
+
+				// Если пусто (нет зданий и дорог) - пропускаем
+				if buildingsAdded == 0 && !req.IncludeRoads {
+					continue
+				}
+
+				// Подготовка к печати тайла
+				if req.PrintReady {
+					opts := generator.PrintOptions{
+						Scale:         req.Scale,
+						BaseThickness: req.BaseThickness,
+						MinWallMM:     req.MinWall,
+					}
+					// Сдвигаем все вершины тайла к (0,0) чтобы он печатался по центру стола
+					offsetX := -(startX + tileSizeMeters/2.0)
+					offsetY := -(startY + tileSizeMeters/2.0)
+					
+					shiftScene(scene, float32(offsetX), float32(offsetY))
+					scene = generator.PrepareForPrint(scene, tileSizeMeters, tileSizeMeters, opts)
+				}
+				
+				// Запись тайла в архив
+				filename := fmt.Sprintf("tile_%d_%d.%s", x, y, req.Format)
+				fWriter, err := zipWriter.Create(filename)
+				if err != nil {
+					log.Printf("failed to create zip file %s: %v", filename, err)
+					continue
+				}
+
+				var buf bytes.Buffer
+				if req.Format == "stl" {
+					generator.ExportSTL(scene, &buf)
+				} else if req.Format == "obj" {
+					generator.ExportOBJ(scene, &buf)
+				} else {
+					generator.ExportGLB(scene, &buf)
+				}
+				
+				fWriter.Write(buf.Bytes())
+				validTilesCount++
+			}
+		}
+		
+		// Генерация SVG карты сборки
+		if validTilesCount > 0 {
+			svgFilename := "layout_map.svg"
+			svgWriter, _ := zipWriter.Create(svgFilename)
+			svgContent := generateLayoutSVG(numX, numY, tileSizeMeters, req.BoardSizeMM)
+			svgWriter.Write([]byte(svgContent))
+		}
+
+		zipWriter.Close()
+		resultData = zipBuf.Bytes()
+		resultFormat = "zip"
+		
+		log.Printf("ZIP created with %d tiles in %v", validTilesCount, time.Since(start))
+
+	} else {
+		// Обычная генерация единой модели...
+		scene := generator.NewScene()
+		
+		if req.IncludeTerrain {
+			grid, err := h.elevation.FetchElevationGrid(bbox, 20)
+			if err != nil {
+				scene.AddMesh(generator.GenerateFlatGround(req.WidthM, req.HeightM))
+			} else {
+				scene.AddMesh(generator.GenerateTerrain(grid, req.Lat, req.Lon))
+			}
+		} else {
+			scene.AddMesh(generator.GenerateFlatGround(req.WidthM, req.HeightM))
+		}
+
+		if req.IncludeRoads {
+			for _, m := range generator.GenerateRoads(roads, req.Lat, req.Lon, nil) {
+				scene.AddMesh(m)
+			}
+		}
+
+		for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon, nil) {
 			scene.AddMesh(m)
 		}
-	}
 
-	// Здания
-	for _, m := range generator.GenerateBuildings(buildings, req.Lat, req.Lon) {
-		scene.AddMesh(m)
-	}
-
-	log.Printf("Scene: %d vertices, %d triangles", scene.TotalVertices(), scene.TotalTriangles())
-
-	// === Подготовка к 3D-печати ===
-	if req.PrintReady {
-		opts := generator.PrintOptions{
-			Scale:         req.Scale,
-			BaseThickness: req.BaseThickness,
-			MinWallMM:     req.MinWall,
+		if req.PrintReady {
+			opts := generator.PrintOptions{
+				Scale:         req.Scale,
+				BaseThickness: req.BaseThickness,
+				MinWallMM:     req.MinWall,
+			}
+			scene = generator.PrepareForPrint(scene, req.WidthM, req.HeightM, opts)
 		}
-		scene = generator.PrepareForPrint(scene, req.WidthM, req.HeightM, opts)
-		log.Printf("Print-ready: scale=%.6f, base=%.1fmm, scene: %d vertices, %d triangles",
-			req.Scale, req.BaseThickness, scene.TotalVertices(), scene.TotalTriangles())
-	}
 
-	// === Экспорт ===
-	var buf bytes.Buffer
-	switch generator.ExportFormat(req.Format) {
-	case generator.FormatOBJ:
-		if err := generator.ExportOBJ(scene, &buf); err != nil {
-			writeError(w, http.StatusInternalServerError, "export obj: "+err.Error())
-			return
+		var buf bytes.Buffer
+		switch req.Format {
+		case "obj":
+			generator.ExportOBJ(scene, &buf)
+		case "stl":
+			generator.ExportSTL(scene, &buf)
+		default:
+			generator.ExportGLB(scene, &buf)
 		}
-	case generator.FormatSTL:
-		if err := generator.ExportSTL(scene, &buf); err != nil {
-			writeError(w, http.StatusInternalServerError, "export stl: "+err.Error())
-			return
-		}
-	default:
-		if err := generator.ExportGLB(scene, &buf); err != nil {
-			writeError(w, http.StatusInternalServerError, "export glb: "+err.Error())
-			return
-		}
+		resultData = buf.Bytes()
 	}
-
-	data := buf.Bytes()
-	log.Printf("Generated %d bytes in %v", len(data), time.Since(start))
 
 	// Кэшируем
-	h.cache.Set(cacheKey, data)
+	h.cache.Set(cacheKey, resultData)
 
-	writeModelResponse(w, data, req.Format)
+	writeModelResponse(w, resultData, resultFormat)
+}
+
+func shiftScene(scene *generator.Scene, offsetX, offsetY float32) {
+	for _, m := range scene.Meshes {
+		for i := 0; i < len(m.Vertices); i += 3 {
+			m.Vertices[i] += offsetX
+			m.Vertices[i+2] += offsetY
+		}
+	}
+}
+
+func generateLayoutSVG(numX, numY int, tileSizeMeters float64, boardSizeMM float64) string {
+	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d">
+	<style>
+		.tile { fill: #f0f0f0; stroke: #333; stroke-width: 2; }
+		.text { font-family: sans-serif; font-size: 14px; text-anchor: middle; dominant-baseline: middle; fill: #333; }
+		.title { font-family: sans-serif; font-size: 20px; font-weight: bold; }
+	</style>
+	<text x="20" y="30" class="title">Схема склейки плат (%dx%d)</text>
+	<text x="20" y="55" font-family="sans-serif" font-size="14px">Размер одной платы: %.1f мм</text>
+	<g transform="translate(20, 80)">
+`, numX*100+40, numY*100+100, numX, numY, boardSizeMM)
+
+	for y := 0; y < numY; y++ {
+		for x := 0; x < numX; x++ {
+			// Инвертируем Y для привычного 2D отображения (сверху-вниз на SVG, снизу-вверх на карте)
+			drawY := (numY - 1 - y) * 100
+			drawX := x * 100
+			
+			svg += fmt.Sprintf(`		<rect x="%d" y="%d" width="100" height="100" class="tile" />
+		<text x="%d" y="%d" class="text">%d_%d</text>
+`, drawX, drawY, drawX+50, drawY+50, x, y)
+		}
+	}
+
+	svg += "\n\t</g>\n</svg>"
+	return svg
 }
 
 // HandleGeocode обрабатывает GET /api/v1/geocode.
@@ -252,6 +403,9 @@ func writeModelResponse(w http.ResponseWriter, data []byte, format string) {
 	case "stl":
 		w.Header().Set("Content-Type", "application/sla")
 		w.Header().Set("Content-Disposition", "attachment; filename=model.stl")
+	case "zip":
+		w.Header().Set("Content-Type", "application/zip")
+		w.Header().Set("Content-Disposition", "attachment; filename=model.zip")
 	default:
 		w.Header().Set("Content-Type", "model/gltf-binary")
 		w.Header().Set("Content-Disposition", "attachment; filename=model.glb")

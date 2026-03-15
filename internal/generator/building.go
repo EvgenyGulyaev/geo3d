@@ -4,12 +4,14 @@ import (
 	"fmt"
 
 	"github.com/evgeny/3d-maps/internal/geo"
+	"github.com/evgeny/3d-maps/internal/math2d"
 	"github.com/evgeny/3d-maps/internal/triangulate"
 )
 
 // GenerateBuilding создаёт 3D-меш здания из его контура и высоты.
 // centerLat, centerLon — центр карты для преобразования координат в метры.
-func GenerateBuilding(b geo.Building, centerLat, centerLon float64) *Mesh {
+// clipRect — (опционально) прямоугольник для отсечения контура (или nil).
+func GenerateBuilding(b geo.Building, centerLat, centerLon float64, clipRect *math2d.Rect) *Mesh {
 	if len(b.Outline) < 3 {
 		return nil
 	}
@@ -19,6 +21,11 @@ func GenerateBuilding(b geo.Building, centerLat, centerLon float64) *Mesh {
 	for _, c := range b.Outline {
 		p := geo.LatLonToMeters(c.Lat, c.Lon, centerLat, centerLon)
 		points2D = append(points2D, triangulate.Point{X: p.X, Y: p.Y})
+	}
+
+	// Отсечение полигона по BBox тайла, если задан
+	if clipRect != nil {
+		points2D = math2d.ClipPolygon(points2D, *clipRect)
 	}
 
 	// Убираем замыкающую точку, если она совпадает с первой
@@ -122,10 +129,10 @@ func GenerateBuilding(b geo.Building, centerLat, centerLon float64) *Mesh {
 }
 
 // GenerateBuildings генерирует меши для списка зданий.
-func GenerateBuildings(buildings []geo.Building, centerLat, centerLon float64) []*Mesh {
+func GenerateBuildings(buildings []geo.Building, centerLat, centerLon float64, clipRect *math2d.Rect) []*Mesh {
 	var meshes []*Mesh
 	for _, b := range buildings {
-		if m := GenerateBuilding(b, centerLat, centerLon); m != nil {
+		if m := GenerateBuilding(b, centerLat, centerLon, clipRect); m != nil {
 			meshes = append(meshes, m)
 		}
 	}

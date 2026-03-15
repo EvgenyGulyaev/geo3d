@@ -91,6 +91,10 @@ type GenerateRequest struct {
 	Scale          float64 `json:"scale"`            // масштаб, напр. 0.002 = 1:500
 	BaseThickness  float64 `json:"base_thickness"`   // толщина основы в мм (по умолч. 3)
 	MinWall        float64 `json:"min_wall"`         // мин. толщина стены мм (по умолч. 0.8)
+
+	// Разделение на платы
+	SplitBoard     bool    `json:"split_board"`      // разбить модель на тайлы
+	BoardSizeMM    float64 `json:"board_size_mm"`    // размер 1 платы в мм (напр. 160)
 }
 
 const (

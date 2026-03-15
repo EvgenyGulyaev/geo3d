@@ -143,6 +143,30 @@ func GenerateFlatGround(widthM, heightM float64) *Mesh {
 	}
 }
 
+// GenerateFlatGroundFromRect создаёт плоскую поверхность земли по координатам.
+func GenerateFlatGroundFromRect(minX, minY, maxX, maxY float64) *Mesh {
+	return &Mesh{
+		Name:  "ground",
+		Color: [4]float32{0.45, 0.55, 0.35, 1.0},
+		Vertices: []float32{
+			float32(minX), 0, float32(minY),
+			float32(maxX), 0, float32(minY),
+			float32(maxX), 0, float32(maxY),
+			float32(minX), 0, float32(maxY),
+		},
+		Normals: []float32{
+			0, 1, 0,
+			0, 1, 0,
+			0, 1, 0,
+			0, 1, 0,
+		},
+		Indices: []uint32{
+			0, 1, 2,
+			0, 2, 3,
+		},
+	}
+}
+
 // terrainColorByElevation возвращает цвет по высоте рельефа.
 func terrainColorByElevation(elevation float64) [4]float32 {
 	_ = elevation

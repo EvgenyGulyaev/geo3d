@@ -24,7 +24,7 @@ func NewOverpassClient(baseURL string) *OverpassClient {
 	return &OverpassClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 	}
 }
@@ -59,7 +59,7 @@ type overpassMember struct {
 
 // FetchBuildings загружает здания в указанном BBox.
 func (c *OverpassClient) FetchBuildings(bbox BBox) ([]Building, error) {
-	query := fmt.Sprintf(`[out:json][timeout:30];
+	query := fmt.Sprintf(`[out:json][timeout:90];
 (
   way["building"](%.6f,%.6f,%.6f,%.6f);
 );
@@ -98,7 +98,7 @@ out body geom;`, bbox.MinLat, bbox.MinLon, bbox.MaxLat, bbox.MaxLon)
 
 // FetchRoads загружает дороги в указанном BBox.
 func (c *OverpassClient) FetchRoads(bbox BBox) ([]Road, error) {
-	query := fmt.Sprintf(`[out:json][timeout:30];
+	query := fmt.Sprintf(`[out:json][timeout:90];
 (
   way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|service)$"](%.6f,%.6f,%.6f,%.6f);
 );
@@ -134,7 +134,7 @@ out body geom;`, bbox.MinLat, bbox.MinLon, bbox.MaxLat, bbox.MaxLon)
 
 // FetchWater загружает водоёмы в указанном BBox.
 func (c *OverpassClient) FetchWater(bbox BBox) ([]WaterArea, error) {
-	query := fmt.Sprintf(`[out:json][timeout:30];
+	query := fmt.Sprintf(`[out:json][timeout:90];
 (
   way["natural"="water"](%.6f,%.6f,%.6f,%.6f);
   way["waterway"~"^(river|stream|canal)$"](%.6f,%.6f,%.6f,%.6f);

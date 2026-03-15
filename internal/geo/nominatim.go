@@ -29,9 +29,12 @@ type nominatimResponse struct {
 }
 
 // NewNominatimClient создаёт новый клиент Nominatim.
-func NewNominatimClient() *NominatimClient {
+func NewNominatimClient(baseURL string) *NominatimClient {
+	if baseURL == "" {
+		baseURL = "https://nominatim.openstreetmap.org"
+	}
 	return &NominatimClient{
-		baseURL: "https://nominatim.openstreetmap.org",
+		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},

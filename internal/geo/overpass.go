@@ -17,9 +17,12 @@ type OverpassClient struct {
 }
 
 // NewOverpassClient создаёт новый клиент Overpass API.
-func NewOverpassClient() *OverpassClient {
+func NewOverpassClient(baseURL string) *OverpassClient {
+	if baseURL == "" {
+		baseURL = "https://overpass-api.de/api/interpreter"
+	}
 	return &OverpassClient{
-		baseURL: "https://overpass-api.de/api/interpreter",
+		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},

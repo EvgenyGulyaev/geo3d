@@ -22,11 +22,11 @@ type Handler struct {
 }
 
 // NewHandler создаёт обработчик.
-func NewHandler(c *cache.LRU) *Handler {
+func NewHandler(c *cache.LRU, overpassURL, elevationURL, nominatimURL string) *Handler {
 	return &Handler{
-		overpass:  geo.NewOverpassClient(),
-		elevation: geo.NewElevationClient(),
-		nominatim: geo.NewNominatimClient(),
+		overpass:  geo.NewOverpassClient(overpassURL),
+		elevation: geo.NewElevationClient(elevationURL),
+		nominatim: geo.NewNominatimClient(nominatimURL),
 		cache:     c,
 	}
 }

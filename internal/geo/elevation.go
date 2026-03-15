@@ -15,9 +15,12 @@ type ElevationClient struct {
 }
 
 // NewElevationClient создаёт клиент Open Elevation API.
-func NewElevationClient() *ElevationClient {
+func NewElevationClient(baseURL string) *ElevationClient {
+	if baseURL == "" {
+		baseURL = "https://api.open-elevation.com/api/v1/lookup"
+	}
 	return &ElevationClient{
-		baseURL: "https://api.open-elevation.com/api/v1/lookup",
+		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},

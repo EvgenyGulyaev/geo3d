@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/evgeny/3d-maps/internal/cache"
@@ -18,6 +20,15 @@ import (
 	"github.com/evgeny/3d-maps/internal/math2d"
 )
 
+var startTime = time.Now()
+
+type metricsRegistry struct {
+	totalRequests  uint64
+	activeRequests int64
+	cacheHits      uint64
+	cacheMisses    uint64
+}
+
 // Handler содержит зависимости для HTTP-обработчиков.
 type Handler struct {
 	overpass  *geo.OverpassClient
@@ -26,6 +37,7 @@ type Handler struct {
 	cache     *cache.LRU
 	mail      *mail.Mailer
 	cfg       *config.Config
+	metrics   metricsRegistry
 }
 
 // NewHandler создаёт обработчик.
@@ -42,6 +54,10 @@ func NewHandler(c *cache.LRU, cfg *config.Config) *Handler {
 
 // HandleGenerate обрабатывает POST /api/v1/generate.
 func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
+	atomic.AddUint64(&h.metrics.totalRequests, 1)
+	atomic.AddInt64(&h.metrics.activeRequests, 1)
+	defer atomic.AddInt64(&h.metrics.activeRequests, -1)
+
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -81,6 +97,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	// Проверяем кэш
 	if data, ok := h.cache.Get(cacheKey); ok {
+		atomic.AddUint64(&h.metrics.cacheHits, 1)
 		slog.Info("Cache hit", "key", cacheKey)
 		effectiveFormat := req.Format
 		if req.SplitBoard {
@@ -89,6 +106,8 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 		writeModelResponse(w, data, effectiveFormat)
 		return
 	}
+
+	atomic.AddUint64(&h.metrics.cacheMisses, 1)
 
 	if req.Email != "" {
 		// Асинхронная обработка
@@ -394,6 +413,10 @@ func generateLayoutSVG(numX, numY int, tileSizeMeters float64, boardSizeMM float
 
 // HandleGeocode обрабатывает GET /api/v1/geocode.
 func (h *Handler) HandleGeocode(w http.ResponseWriter, r *http.Request) {
+	atomic.AddUint64(&h.metrics.totalRequests, 1)
+	atomic.AddInt64(&h.metrics.activeRequests, 1)
+	defer atomic.AddInt64(&h.metrics.activeRequests, -1)
+
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -420,6 +443,26 @@ func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
 		"status": "ok",
 		"time":   time.Now().Format(time.RFC3339),
 	})
+}
+
+// HandleMetrics возвращает метрики приложения в формате JSON.
+func (h *Handler) HandleMetrics(w http.ResponseWriter, r *http.Request) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	metricsData := map[string]interface{}{
+		"uptime_seconds":  time.Since(startTime).Seconds(),
+		"total_requests":  atomic.LoadUint64(&h.metrics.totalRequests),
+		"active_requests": atomic.LoadInt64(&h.metrics.activeRequests),
+		"cache_hits":      atomic.LoadUint64(&h.metrics.cacheHits),
+		"cache_misses":    atomic.LoadUint64(&h.metrics.cacheMisses),
+		"goroutines":      runtime.NumGoroutine(),
+		"mem_alloc_mb":    float64(m.Alloc) / 1024 / 1024,
+		"mem_sys_mb":      float64(m.Sys) / 1024 / 1024,
+		"mem_num_gc":      m.NumGC,
+	}
+
+	writeJSON(w, http.StatusOK, metricsData)
 }
 
 func validateRequest(req *geo.GenerateRequest) error {

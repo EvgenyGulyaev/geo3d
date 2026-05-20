@@ -25,6 +25,9 @@ type Config struct {
 	// Logging settings
 	Env               string // development | production
 	LogFormat         string // text | json
+	// Security settings
+	APIKey            string
+	RateLimitRPM      int
 }
 
 // Load читает конфигурацию из .env файла и переменных окружения.
@@ -47,6 +50,8 @@ func Load() *Config {
 		SMTPFrom:          getEnv("SMTP_FROM", ""),
 		Env:               getEnv("ENV", "development"),
 		LogFormat:         getEnv("LOG_FORMAT", "text"),
+		APIKey:            getEnv("API_KEY", ""),
+		RateLimitRPM:      getEnvAsInt("RATE_LIMIT_RPM", 60),
 	}
 
 	return cfg

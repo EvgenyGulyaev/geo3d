@@ -12,6 +12,7 @@ import (
 type Config struct {
 	Port              string
 	CacheSize         int
+	CacheDir          string
 	OverpassAPIURL    string
 	ElevationAPIURL   string
 	NominatimAPIURL   string
@@ -21,6 +22,9 @@ type Config struct {
 	SMTPUser          string
 	SMTPPass          string
 	SMTPFrom          string
+	// Logging settings
+	Env               string // development | production
+	LogFormat         string // text | json
 }
 
 // Load читает конфигурацию из .env файла и переменных окружения.
@@ -32,6 +36,7 @@ func Load() *Config {
 	cfg := &Config{
 		Port:              getEnv("PORT", "8080"),
 		CacheSize:         getEnvAsInt("CACHE_SIZE", 50),
+		CacheDir:          getEnv("CACHE_DIR", "./.cache"),
 		OverpassAPIURL:    getEnv("OVERPASS_API_URL", "https://overpass-api.de/api/interpreter"),
 		ElevationAPIURL:   getEnv("ELEVATION_API_URL", "https://api.open-elevation.com/api/v1/lookup"),
 		NominatimAPIURL:   getEnv("NOMINATIM_API_URL", "https://nominatim.openstreetmap.org"),
@@ -40,6 +45,8 @@ func Load() *Config {
 		SMTPUser:          getEnv("SMTP_USER", ""),
 		SMTPPass:          getEnv("SMTP_PASS", ""),
 		SMTPFrom:          getEnv("SMTP_FROM", ""),
+		Env:               getEnv("ENV", "development"),
+		LogFormat:         getEnv("LOG_FORMAT", "text"),
 	}
 
 	return cfg

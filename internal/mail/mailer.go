@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"log"
+	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"net/smtp"
@@ -62,8 +62,12 @@ func (m *Mailer) SendModelEmail(to, filename string, data []byte) error {
 	encoder.Write(data)
 	encoder.Close()
 
-	// Отправка через SMTP
-	log.Printf("Attempting to send email to %s via %s:%d (from: %s)...", to, m.cfg.SMTPHost, m.cfg.SMTPPort, m.cfg.SMTPUser)
+	slog.Info("Attempting to send email",
+		"to", to,
+		"host", m.cfg.SMTPHost,
+		"port", m.cfg.SMTPPort,
+		"user", m.cfg.SMTPUser,
+	)
 	auth := smtp.PlainAuth("", m.cfg.SMTPUser, m.cfg.SMTPPass, m.cfg.SMTPHost)
 	addr := fmt.Sprintf("%s:%d", m.cfg.SMTPHost, m.cfg.SMTPPort)
 
@@ -75,10 +79,10 @@ func (m *Mailer) SendModelEmail(to, filename string, data []byte) error {
 
 	err := smtp.SendMail(addr, auth, fromEmail, []string{to}, buf.Bytes())
 	if err != nil {
-		log.Printf("SMTP SendMail failed: %v", err)
+		slog.Error("SMTP SendMail failed", "error", err)
 		return fmt.Errorf("send mail: %w", err)
 	}
 
-	log.Printf("Successfully sent email to %s", to)
+	slog.Info("Successfully sent email", "to", to)
 	return nil
 }

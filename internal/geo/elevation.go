@@ -94,17 +94,22 @@ func (c *ElevationClient) FetchElevationGrid(bbox BBox, gridSize int) (*Elevatio
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("User-Agent", "3d-maps-generator/1.0")
 
-		resp, err := c.httpClient.Do(req)
+		resp, err := doWithRetry(c.httpClient, req)
 		if err != nil {
 			return nil, fmt.Errorf("elevation request: %w", err)
 		}
 
-		var result elevationResponse
-		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
+			return nil, fmt.Errorf("elevation status: %d", resp.StatusCode)
+		}
+
+		var result elevationResponse
+		err = json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if err != nil {
 			return nil, fmt.Errorf("decode response: %w", err)
 		}
-		resp.Body.Close()
 
 		for _, r := range result.Results {
 			allResults = append(allResults, r.Elevation)

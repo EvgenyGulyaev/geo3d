@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"math"
 	"net/http"
 	"time"
@@ -53,7 +53,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Incoming request: %+v", req)
+	slog.Info("Incoming request", "req", req)
 
 	// Валидация
 	if err := validateRequest(&req); err != nil {
@@ -81,7 +81,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 
 	// Проверяем кэш
 	if data, ok := h.cache.Get(cacheKey); ok {
-		log.Printf("Cache hit for %s", cacheKey)
+		slog.Info("Cache hit", "key", cacheKey)
 		effectiveFormat := req.Format
 		if req.SplitBoard {
 			effectiveFormat = "zip"
@@ -112,7 +112,7 @@ func (h *Handler) HandleGenerate(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) processGenerateAsync(req geo.GenerateRequest, cacheKey string) {
 	data, format, err := h.generateModelSync(req, cacheKey)
 	if err != nil {
-		log.Printf("Async generation error: %v", err)
+		slog.Error("Async generation error", "error", err)
 		return
 	}
 
@@ -123,9 +123,9 @@ func (h *Handler) processGenerateAsync(req geo.GenerateRequest, cacheKey string)
 
 	err = h.mail.SendModelEmail(req.Email, filename, data)
 	if err != nil {
-		log.Printf("Failed to send email to %s: %v", req.Email, err)
+		slog.Error("Failed to send email", "email", req.Email, "error", err)
 	} else {
-		log.Printf("Email successfully sent to %s", req.Email)
+		slog.Info("Email successfully sent", "email", req.Email)
 	}
 }
 
@@ -133,7 +133,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 	start := time.Now()
 	// Проверяем кэш еще раз (на случай если за время пока мы думали он там появился)
 	if data, ok := h.cache.Get(cacheKey); ok {
-		log.Printf("Cache hit in sync worker for %s", cacheKey)
+		slog.Info("Cache hit in sync worker", "key", cacheKey)
 		effectiveFormat := req.Format
 		if req.SplitBoard && !req.MergeTiles {
 			effectiveFormat = "zip"
@@ -141,8 +141,12 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 		return data, effectiveFormat, nil
 	}
 
-	log.Printf("Generating model: lat=%.5f lon=%.5f size=%.0fx%.0f format=%s",
-		req.Lat, req.Lon, req.WidthM, req.HeightM, req.Format)
+	slog.Info("Generating model",
+		"lat", req.Lat,
+		"lon", req.Lon,
+		"width_m", req.WidthM,
+		"height_m", req.HeightM,
+		"format", req.Format)
 
 	// Создаём BBox
 	bbox := geo.BBoxFromCenter(req.Lat, req.Lon, req.WidthM, req.HeightM)
@@ -154,16 +158,16 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 	if err != nil {
 		return nil, "", fmt.Errorf("fetch buildings: %w", err)
 	}
-	log.Printf("Fetched %d buildings", len(buildings))
+	slog.Info("Fetched buildings", "count", len(buildings))
 
 	// Дороги
 	var roads []geo.Road
 	if req.IncludeRoads {
 		roads, err = h.overpass.FetchRoads(bbox)
 		if err != nil {
-			log.Printf("Warning: fetch roads failed: %v", err)
+			slog.Warn("Fetch roads failed", "error", err)
 		} else {
-			log.Printf("Fetched %d roads", len(roads))
+			slog.Info("Fetched roads", "count", len(roads))
 		}
 	}
 
@@ -172,7 +176,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 
 	// Если запрошено разделение на платы
 	if req.SplitBoard && req.BoardSizeMM > 0 {
-		log.Printf(">>> Branch: SPLIT BOARD (BoardSize=%.1f)", req.BoardSizeMM)
+		slog.Info("Branch: SPLIT BOARD", "board_size_mm", req.BoardSizeMM)
 		// BoardSizeMM - размер платы в мм. Scale: например, 0.002 = 2мм на 1метр.
 		// Значит, 1 плата в физическом мире покроет: BoardSizeMM / Scale (метров из геометрии)
 		baseScale := req.Scale
@@ -180,12 +184,17 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 			baseScale = 1.0 // safeguard
 		}
 		
-		tileSizeMeters := req.BoardSizeMM / baseScale
+		tileSizeMeters := req.BoardSizeMM / (baseScale * 1000.0)
 		
 		numX := int(math.Ceil(req.WidthM / tileSizeMeters))
 		numY := int(math.Ceil(req.HeightM / tileSizeMeters))
 
-		log.Printf("Splitting into %dx%d tiles, tile size %.2fm (board %vmm, scale %.6f)", numX, numY, tileSizeMeters, req.BoardSizeMM, baseScale)
+		slog.Info("Splitting into tiles",
+			"num_x", numX,
+			"num_y", numY,
+			"tile_size_meters", tileSizeMeters,
+			"board_size_mm", req.BoardSizeMM,
+			"scale", baseScale)
 
 		var zipBuf bytes.Buffer
 		zipWriter := zip.NewWriter(&zipBuf)
@@ -203,7 +212,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 			var err error
 			_, err = h.elevation.FetchElevationGrid(bbox, 20)
 			if err != nil {
-				log.Printf("Warning: fetch elevation failed for split: %v", err)
+				slog.Warn("Fetch elevation failed for split", "error", err)
 			}
 		}
 
@@ -286,10 +295,15 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 			resultFormat = "zip"
 		}
 		
-		log.Printf("Final format: %s (merged=%v), tiles: %d", resultFormat, req.MergeTiles, validTilesCount)
+		slog.Info("Final format",
+			"format", resultFormat,
+			"merged", req.MergeTiles,
+			"tiles_count", validTilesCount)
 
 	} else {
-		log.Printf(">>> Branch: SINGLE MODEL (Split=%v Size=%v)", req.SplitBoard, req.BoardSizeMM)
+		slog.Info("Branch: SINGLE MODEL",
+			"split", req.SplitBoard,
+			"size", req.BoardSizeMM)
 		// Обычная генерация единой модели...
 		scene := generator.NewScene()
 		
@@ -337,7 +351,7 @@ func (h *Handler) generateModelSync(req geo.GenerateRequest, cacheKey string) (r
 
 	// Кэшируем
 	h.cache.Set(cacheKey, resultData)
-	log.Printf("Model generated and cached in %v", time.Since(start))
+	slog.Info("Model generated and cached", "duration", time.Since(start))
 	return resultData, resultFormat, nil
 }
 

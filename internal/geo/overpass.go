@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -173,7 +173,7 @@ out body geom;`, bbox.MinLat, bbox.MinLon, bbox.MaxLat, bbox.MaxLon,
 	return water, nil
 }
 
-// execute выполняет запрос к Overpass API.
+// execute выполняет запрос к Overpass API с ретраями.
 func (c *OverpassClient) execute(query string) (*overpassResponse, error) {
 	body := strings.NewReader("data=" + query)
 	req, err := http.NewRequest(http.MethodPost, c.baseURL, body)
@@ -183,14 +183,13 @@ func (c *OverpassClient) execute(query string) (*overpassResponse, error) {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("User-Agent", "3d-maps-generator/1.0")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := doWithRetry(c.httpClient, req)
 	if err != nil {
-		log.Printf("SMTP HTTP request failed: %v", err) // Added log
 		return nil, fmt.Errorf("overpass request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	log.Printf("Overpass response status: %d", resp.StatusCode) // Added log
+	slog.Info("Overpass response status", "status_code", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("overpass status %d: %s", resp.StatusCode, string(respBody))

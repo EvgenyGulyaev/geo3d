@@ -60,7 +60,7 @@ func (c *NominatimClient) Geocode(query string) (*NominatimResult, error) {
 	}
 	req.Header.Set("User-Agent", "3d-maps-generator/1.0")
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := doWithRetry(c.httpClient, req)
 	if err != nil {
 		return nil, fmt.Errorf("nominatim request: %w", err)
 	}

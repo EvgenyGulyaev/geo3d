@@ -29,3 +29,7 @@ go.work.sum
 .env
 
 .idea
+
+# Logs
+server.log
+

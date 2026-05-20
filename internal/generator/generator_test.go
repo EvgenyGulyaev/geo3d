@@ -21,7 +21,7 @@ func TestGenerateBuilding(t *testing.T) {
 		},
 	}
 
-	mesh := GenerateBuilding(building, 55.7553, 37.6172)
+	mesh := GenerateBuilding(building, 55.7553, 37.6172, nil, 1.0)
 	if mesh == nil {
 		t.Fatal("expected mesh, got nil")
 	}

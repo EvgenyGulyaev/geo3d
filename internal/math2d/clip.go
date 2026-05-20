@@ -32,10 +32,10 @@ func ClipPolygon(subjectPolygon []triangulate.Point, r Rect) []triangulate.Point
 	}
 
 	clipEdges := [4][2]triangulate.Point{
-		{{r.MinX, r.MinY}, {r.MaxX, r.MinY}}, // Bottom edge
-		{{r.MaxX, r.MinY}, {r.MaxX, r.MaxY}}, // Right edge
-		{{r.MaxX, r.MaxY}, {r.MinX, r.MaxY}}, // Top edge
-		{{r.MinX, r.MaxY}, {r.MinX, r.MinY}}, // Left edge
+		{{X: r.MinX, Y: r.MinY}, {X: r.MaxX, Y: r.MinY}}, // Bottom edge
+		{{X: r.MaxX, Y: r.MinY}, {X: r.MaxX, Y: r.MaxY}}, // Right edge
+		{{X: r.MaxX, Y: r.MaxY}, {X: r.MinX, Y: r.MaxY}}, // Top edge
+		{{X: r.MinX, Y: r.MaxY}, {X: r.MinX, Y: r.MinY}}, // Left edge
 	}
 
 	result := append([]triangulate.Point(nil), subjectPolygon...)

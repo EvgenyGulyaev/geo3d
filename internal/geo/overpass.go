@@ -85,7 +85,7 @@ out body geom;`, bbox.MinLat, bbox.MinLon, bbox.MaxLat, bbox.MaxLon)
 
 		// Извлечение контура
 		for _, node := range el.Geometry {
-			b.Outline = append(b.Outline, Coord{Lat: node.Lat, Lon: node.Lon})
+			b.Outline = append(b.Outline, Coord(node))
 		}
 
 		// Определение высоты
@@ -123,7 +123,7 @@ out body geom;`, bbox.MinLat, bbox.MinLon, bbox.MaxLat, bbox.MaxLon)
 		}
 
 		for _, node := range el.Geometry {
-			r.Points = append(r.Points, Coord{Lat: node.Lat, Lon: node.Lon})
+			r.Points = append(r.Points, Coord(node))
 		}
 
 		r.Width, r.Lanes = parseRoadWidth(el.Tags)
@@ -164,7 +164,7 @@ out body geom;`, bbox.MinLat, bbox.MinLon, bbox.MaxLat, bbox.MaxLon,
 		}
 
 		for _, node := range el.Geometry {
-			w.Outline = append(w.Outline, Coord{Lat: node.Lat, Lon: node.Lon})
+			w.Outline = append(w.Outline, Coord(node))
 		}
 
 		water = append(water, w)

@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/evgeny/3d-maps/internal/geo"
@@ -33,16 +32,13 @@ func GenerateTerrain(grid *geo.ElevationGrid, centerLat, centerLon float64) *Mes
 		Color: [4]float32{0.45, 0.55, 0.35, 1.0}, // зелёный
 	}
 
-	// Вычисляем шаг сетки
-	latStep := (grid.Points[0] - grid.OriginLat) // не нужен, используем CellSizeM
-	_ = latStep
+	lonScale := 111320.0 * math.Cos(centerLat*math.Pi/180.0)
 
 	// Создаём вершины
 	for row := 0; row < h; row++ {
 		for col := 0; col < w; col++ {
 			// Позиция в мировых координатах
 			lat := grid.OriginLat + float64(row)*(grid.CellSizeM/111320.0)
-			lonScale := 111320.0 * math.Cos(centerLat*math.Pi/180.0)
 			lon := grid.OriginLon + float64(col)*(grid.CellSizeM/lonScale)
 
 			p := geo.LatLonToMeters(lat, lon, centerLat, centerLon)
@@ -165,14 +161,4 @@ func GenerateFlatGroundFromRect(minX, minY, maxX, maxY float64) *Mesh {
 			0, 2, 3,
 		},
 	}
-}
-
-// terrainColorByElevation возвращает цвет по высоте рельефа.
-func terrainColorByElevation(elevation float64) [4]float32 {
-	_ = elevation
-	return [4]float32{0.45, 0.55, 0.35, 1.0}
-}
-
-func init() {
-	_ = fmt.Sprintf // suppress unused import
 }

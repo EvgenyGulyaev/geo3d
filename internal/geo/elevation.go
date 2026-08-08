@@ -60,7 +60,7 @@ func (c *ElevationClient) FetchElevationGrid(bbox BBox, gridSize int) (*Elevatio
 	lonStep := (bbox.MaxLon - bbox.MinLon) / float64(gridSize-1)
 
 	// Формируем точки сетки
-	var locations []elevationLocation
+	locations := make([]elevationLocation, 0, gridSize*gridSize)
 	for row := 0; row < gridSize; row++ {
 		for col := 0; col < gridSize; col++ {
 			locations = append(locations, elevationLocation{
@@ -122,9 +122,7 @@ func (c *ElevationClient) FetchElevationGrid(bbox BBox, gridSize int) (*Elevatio
 	}
 
 	// Вычисляем размер ячейки в метрах
-	centerLat := (bbox.MinLat + bbox.MaxLat) / 2
 	cellSizeM := latStep * 111320.0 // приблизительно
-	_ = centerLat
 
 	return &ElevationGrid{
 		Width:     gridSize,

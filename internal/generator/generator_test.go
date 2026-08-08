@@ -52,6 +52,28 @@ func TestGenerateFlatGround(t *testing.T) {
 	}
 }
 
+func TestGenerateTerrainPreallocatesMeshBuffers(t *testing.T) {
+	mesh := GenerateTerrain(&geo.ElevationGrid{
+		Width:     3,
+		Height:    3,
+		CellSizeM: 1,
+		Points:    []float64{1, 2, 3, 4, 5, 6, 7, 8, 9},
+	}, 55, 37)
+
+	if mesh == nil {
+		t.Fatal("expected terrain mesh")
+	}
+	if got, want := cap(mesh.Vertices), 27; got != want {
+		t.Fatalf("vertex capacity = %d, want %d", got, want)
+	}
+	if got, want := cap(mesh.Normals), 27; got != want {
+		t.Fatalf("normal capacity = %d, want %d", got, want)
+	}
+	if got, want := cap(mesh.Indices), 24; got != want {
+		t.Fatalf("index capacity = %d, want %d", got, want)
+	}
+}
+
 func TestExportGLB(t *testing.T) {
 	scene := NewScene()
 	scene.AddMesh(GenerateFlatGround(100, 100))

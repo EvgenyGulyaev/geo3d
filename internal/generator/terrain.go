@@ -28,8 +28,11 @@ func GenerateTerrain(grid *geo.ElevationGrid, centerLat, centerLon float64) *Mes
 	}
 
 	mesh := &Mesh{
-		Name:  "terrain",
-		Color: [4]float32{0.45, 0.55, 0.35, 1.0}, // зелёный
+		Name:     "terrain",
+		Color:    [4]float32{0.45, 0.55, 0.35, 1.0}, // зелёный
+		Vertices: make([]float32, 0, 3*w*h),
+		Normals:  make([]float32, 0, 3*w*h),
+		Indices:  make([]uint32, 0, 6*(w-1)*(h-1)),
 	}
 
 	lonScale := 111320.0 * math.Cos(centerLat*math.Pi/180.0)
